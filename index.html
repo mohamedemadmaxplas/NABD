@@ -1372,7 +1372,7 @@
                 <i class="fab fa-google"></i>
                 <h3>تسجيل الدخول بجوجل</h3>
             </div>
-        <div id="g_id_onload" data-client_id="132078192935-nnv76u51fsm9c9qjoprm4vfdp30c8ecu.apps.googleusercontent.com" data-callback="handleGoogleLogin"></div>
+          <div id="g_id_onload" data-client_id="132078192935-nnv76u51fsm9c9qjoprm4vfdp30c8ecu.apps.googleusercontent.com" data-callback="handleGoogleLogin"></div>
             <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="sign_in_with" data-shape="rectangular"></div>
             
             <div style="margin: 1rem 0;">
@@ -3186,42 +3186,59 @@ function listenForCartUpdates(userId) {
             document.getElementById('edit-product-modal')?.classList.add('show');
         }
         
-        function addEditColorField() {
-            const container = document.getElementById('edit-colors-container');
-            if (!container) return;
-            const count = container.children.length + 1;
-            const div = document.createElement('div');
-            div.className = 'size-row';
-            div.innerHTML = `<input type="text" placeholder="${currentLang === 'ar' ? 'اللون' : 'Color'}" id="edit-color-name-${count}"><input type="number" placeholder="${currentLang === 'ar' ? 'عدد القطع' : 'Quantity'}" id="edit-color-qty-${count}">`;
-            container.appendChild(div);
-        }
+              function addEditColorField() {
+    const container = document.getElementById('edit-colors-container');
+    if (!container) return;
+    const count = container.children.length + 1;
+    const div = document.createElement('div');
+    div.className = 'size-row';
+    div.innerHTML = `<input type="text" placeholder="اللون" id="edit-color-name-${count}"><input type="number" placeholder="الكمية (اختياري)" id="edit-color-qty-${count}" value="0">`;
+    container.appendChild(div);
+}
         
         function closeEditModal() {
             document.getElementById('edit-product-modal')?.classList.remove('show');
             editUploadedImages = [];
         }
         
-        function handleImageUpload(files) {
-            const container = document.getElementById('image-preview-container');
-            if (!container) return;
-            for (let i = 0; i < files.length; i++) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    uploadedImages.push(e.target.result);
-                    const div = document.createElement('div');
-                    div.className = 'image-preview-item';
-                    div.style.position = 'relative';
-                    div.style.width = '60px';
-                    div.style.height = '60px';
-                    div.innerHTML = `
-                        <img src="${e.target.result}" style="width:100%; height:100%; object-fit:cover; border-radius:8px;">
-                        <div onclick="this.parentElement.remove(); uploadedImages = uploadedImages.filter(img => img !== '${e.target.result}');" style="position:absolute; top:-6px; right:-6px; background:#dc3545; color:white; border-radius:50%; width:18px; height:18px; display:flex; align-items:center; justify-content:center; font-size:10px; cursor:pointer;">×</div>
-                    `;
-                    container.appendChild(div);
-                };
-                reader.readAsDataURL(files[i]);
-            }
+     // متغير مؤقت لتخزين روابط الصور أثناء الإضافة
+let tempProductImages = [];
+
+async function handleImageUpload(files) {
+    const container = document.getElementById('image-preview-container');
+    if (!container) return;
+    
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        // إنشاء ID مؤقت للمنتج
+        const tempId = Date.now() + i;
+        
+        try {
+            // رفع الصورة إلى Firebase Storage
+            const storageRef = storage.ref();
+            const imageRef = storageRef.child(`temp_products/${tempId}_${file.name}`);
+            const snapshot = await imageRef.put(file);
+            const downloadURL = await snapshot.ref.getDownloadURL();
+            
+            tempProductImages.push(downloadURL);
+            
+            // عرض معاينة الصورة
+            const div = document.createElement('div');
+            div.className = 'image-preview-item';
+            div.style.position = 'relative';
+            div.style.width = '60px';
+            div.style.height = '60px';
+            div.innerHTML = `
+                <img src="${downloadURL}" style="width:100%; height:100%; object-fit:cover; border-radius:8px;">
+                <div onclick="this.parentElement.remove(); tempProductImages = tempProductImages.filter(img => img !== '${downloadURL}');" style="position:absolute; top:-6px; right:-6px; background:#dc3545; color:white; border-radius:50%; width:18px; height:18px; display:flex; align-items:center; justify-content:center; font-size:10px; cursor:pointer;">×</div>
+            `;
+            container.appendChild(div);
+        } catch (error) {
+            console.error('فشل رفع الصورة:', error);
+            showToast('فشل رفع الصورة', 'error');
         }
+    }
+}
         
         function handleEditImageUpload(files) {
             const container = document.getElementById('edit-image-preview');
@@ -3271,12 +3288,15 @@ function listenForCartUpdates(userId) {
                     const sizePrice = parseFloat(document.getElementById(`size-${s}-price`)?.value) || price;
                     if (qty > 0) sizes[s.toUpperCase()] = { qty, price: sizePrice };
                 });
-                const colors = {};
-                for (let i = 1; i <= (document.querySelectorAll('[id^="color-name-"]')?.length || 0); i++) {
-                    const colorName = document.getElementById(`color-name-${i}`)?.value;
-                    const qty = parseInt(document.getElementById(`color-qty-${i}`)?.value) || 0;
-                    if (colorName && qty > 0) colors[colorName] = qty;
-                }
+const colors = {};
+for (let i = 1; i <= (document.querySelectorAll('[id^="color-name-"]')?.length || 0); i++) {
+    const colorName = document.getElementById(`color-name-${i}`)?.value;
+    // إذا كان هناك اسم لون، أضفه حتى لو الكمية 0
+    if (colorName && colorName.trim() !== '') {
+        const qty = parseInt(document.getElementById(`color-qty-${i}`)?.value) || 0;
+        colors[colorName] = qty;  // سيتم إضافة اللون حتى لو الكمية 0
+    }
+}
                 const newProduct = { id: nextProductId++, name, description: desc, images, cost, price, sizes, colors };
                 products.push(newProduct);
                 localStorage.setItem('products', JSON.stringify(products));
@@ -3313,12 +3333,14 @@ function listenForCartUpdates(userId) {
                         const priceVal = parseFloat(document.getElementById(`edit-size-${s.toLowerCase()}-price`)?.value) || product.price;
                         if (qty > 0) product.sizes[s] = { qty, price: priceVal };
                     });
-                    product.colors = {};
-                    for (let i = 1; i <= (document.querySelectorAll('#edit-colors-container .size-row')?.length || 0); i++) {
-                        const name = document.getElementById(`edit-color-name-${i}`)?.value;
-                        const qty = parseInt(document.getElementById(`edit-color-qty-${i}`)?.value) || 0;
-                        if (name && qty > 0) product.colors[name] = qty;
-                    }
+                   product.colors = {};
+for (let i = 1; i <= (document.querySelectorAll('#edit-colors-container .size-row')?.length || 0); i++) {
+    const name = document.getElementById(`edit-color-name-${i}`)?.value;
+    if (name && name.trim() !== '') {
+        const qty = parseInt(document.getElementById(`edit-color-qty-${i}`)?.value) || 0;
+        product.colors[name] = qty;  // يتم إضافة اللون حتى لو الكمية 0
+    }
+}
                     if (editUploadedImages.length) {
                         if (!product.images) product.images = [];
                         product.images.push(...editUploadedImages);
@@ -3333,7 +3355,7 @@ function listenForCartUpdates(userId) {
                 }
             });
         }
-        
+ 
         // ==================== REPORTS FUNCTIONS ====================
         function renderReports() {
             const delivered = Array.isArray(orders) ? orders.filter(o => o.status === 'delivered') : [];
